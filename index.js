@@ -1,47 +1,19 @@
-/**
- * Module dependencies.
- */
+'use strict';
 
-var crypto = require('crypto');
+var test = require('tape');
 
-/**
- * Sign the given `val` with `secret`.
- *
- * @param {String} val
- * @param {String|NodeJS.ArrayBufferView|crypto.KeyObject} secret
- * @return {String}
- * @api private
- */
+var E = require('../');
+var R = require('../range');
+var Ref = require('../ref');
+var S = require('../syntax');
+var T = require('../type');
 
-exports.sign = function(val, secret){
-  if ('string' != typeof val) throw new TypeError("Cookie value must be provided as a string.");
-  if (null == secret) throw new TypeError("Secret key must be provided.");
-  return val + '.' + crypto
-    .createHmac('sha256', secret)
-    .update(val)
-    .digest('base64')
-    .replace(/\=+$/, '');
-};
+test('errors', function (t) {
+	t.equal(E, Error);
+	t.equal(R, RangeError);
+	t.equal(Ref, ReferenceError);
+	t.equal(S, SyntaxError);
+	t.equal(T, TypeError);
 
-/**
- * Unsign and decode the given `input` with `secret`,
- * returning `false` if the signature is invalid.
- *
- * @param {String} input
- * @param {String|NodeJS.ArrayBufferView|crypto.KeyObject} secret
- * @return {String|Boolean}
- * @api private
- */
-
-exports.unsign = function(input, secret){
-  if ('string' != typeof input) throw new TypeError("Signed cookie string must be provided.");
-  if (null == secret) throw new TypeError("Secret key must be provided.");
-  var tentativeValue = input.slice(0, input.lastIndexOf('.')),
-      expectedInput = exports.sign(tentativeValue, secret),
-      expectedBuffer = Buffer.from(expectedInput),
-      inputBuffer = Buffer.from(input);
-  return (
-    expectedBuffer.length === inputBuffer.length &&
-    crypto.timingSafeEqual(expectedBuffer, inputBuffer)
-   ) ? tentativeValue : false;
-};
+	t.end();
+});
