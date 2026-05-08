@@ -1,191 +1,317 @@
-# Description
+# cookie
 
-A node.js module for parsing incoming HTML form data.
+[![NPM Version][npm-version-image]][npm-url]
+[![NPM Downloads][npm-downloads-image]][npm-url]
+[![Node.js Version][node-image]][node-url]
+[![Build Status][ci-image]][ci-url]
+[![Coverage Status][coveralls-image]][coveralls-url]
 
-Changes (breaking or otherwise) in v1.0.0 can be found [here](https://github.com/mscdex/busboy/issues/266).
+Basic HTTP cookie parser and serializer for HTTP servers.
 
-# Requirements
+## Installation
 
-* [node.js](http://nodejs.org/) -- v10.16.0 or newer
+This is a [Node.js](https://nodejs.org/en/) module available through the
+[npm registry](https://www.npmjs.com/). Installation is done using the
+[`npm install` command](https://docs.npmjs.com/getting-started/installing-npm-packages-locally):
 
-
-# Install
-
-    npm install busboy
-
-
-# Examples
-
-* Parsing (multipart) with default options:
-
-```js
-const http = require('http');
-
-const busboy = require('busboy');
-
-http.createServer((req, res) => {
-  if (req.method === 'POST') {
-    console.log('POST request');
-    const bb = busboy({ headers: req.headers });
-    bb.on('file', (name, file, info) => {
-      const { filename, encoding, mimeType } = info;
-      console.log(
-        `File [${name}]: filename: %j, encoding: %j, mimeType: %j`,
-        filename,
-        encoding,
-        mimeType
-      );
-      file.on('data', (data) => {
-        console.log(`File [${name}] got ${data.length} bytes`);
-      }).on('close', () => {
-        console.log(`File [${name}] done`);
-      });
-    });
-    bb.on('field', (name, val, info) => {
-      console.log(`Field [${name}]: value: %j`, val);
-    });
-    bb.on('close', () => {
-      console.log('Done parsing form!');
-      res.writeHead(303, { Connection: 'close', Location: '/' });
-      res.end();
-    });
-    req.pipe(bb);
-  } else if (req.method === 'GET') {
-    res.writeHead(200, { Connection: 'close' });
-    res.end(`
-      <html>
-        <head></head>
-        <body>
-          <form method="POST" enctype="multipart/form-data">
-            <input type="file" name="filefield"><br />
-            <input type="text" name="textfield"><br />
-            <input type="submit">
-          </form>
-        </body>
-      </html>
-    `);
-  }
-}).listen(8000, () => {
-  console.log('Listening for requests');
-});
-
-// Example output:
-//
-// Listening for requests
-//   < ... form submitted ... >
-// POST request
-// File [filefield]: filename: "logo.jpg", encoding: "binary", mime: "image/jpeg"
-// File [filefield] got 11912 bytes
-// Field [textfield]: value: "testing! :-)"
-// File [filefield] done
-// Done parsing form!
+```sh
+$ npm install cookie
 ```
 
-* Save all incoming files to disk:
+## API
 
 ```js
-const { randomFillSync } = require('crypto');
-const fs = require('fs');
-const http = require('http');
-const os = require('os');
-const path = require('path');
+var cookie = require('cookie');
+```
 
-const busboy = require('busboy');
+### cookie.parse(str, options)
 
-const random = (() => {
-  const buf = Buffer.alloc(16);
-  return () => randomFillSync(buf).toString('hex');
-})();
+Parse an HTTP `Cookie` header string and returning an object of all cookie name-value pairs.
+The `str` argument is the string representing a `Cookie` header value and `options` is an
+optional object containing additional parsing options.
 
-http.createServer((req, res) => {
-  if (req.method === 'POST') {
-    const bb = busboy({ headers: req.headers });
-    bb.on('file', (name, file, info) => {
-      const saveTo = path.join(os.tmpdir(), `busboy-upload-${random()}`);
-      file.pipe(fs.createWriteStream(saveTo));
-    });
-    bb.on('close', () => {
-      res.writeHead(200, { 'Connection': 'close' });
-      res.end(`That's all folks!`);
-    });
-    req.pipe(bb);
+```js
+var cookies = cookie.parse('foo=bar; equation=E%3Dmc%5E2');
+// { foo: 'bar', equation: 'E=mc^2' }
+```
+
+#### Options
+
+`cookie.parse` accepts these properties in the options object.
+
+##### decode
+
+Specifies a function that will be used to decode a cookie's value. Since the value of a cookie
+has a limited character set (and must be a simple string), this function can be used to decode
+a previously-encoded cookie value into a JavaScript string or other object.
+
+The default function is the global `decodeURIComponent`, which will decode any URL-encoded
+sequences into their byte representations.
+
+**note** if an error is thrown from this function, the original, non-decoded cookie value will
+be returned as the cookie's value.
+
+### cookie.serialize(name, value, options)
+
+Serialize a cookie name-value pair into a `Set-Cookie` header string. The `name` argument is the
+name for the cookie, the `value` argument is the value to set the cookie to, and the `options`
+argument is an optional object containing additional serialization options.
+
+```js
+var setCookie = cookie.serialize('foo', 'bar');
+// foo=bar
+```
+
+#### Options
+
+`cookie.serialize` accepts these properties in the options object.
+
+##### domain
+
+Specifies the value for the [`Domain` `Set-Cookie` attribute][rfc-6265-5.2.3]. By default, no
+domain is set, and most clients will consider the cookie to apply to only the current domain.
+
+##### encode
+
+Specifies a function that will be used to encode a cookie's value. Since value of a cookie
+has a limited character set (and must be a simple string), this function can be used to encode
+a value into a string suited for a cookie's value.
+
+The default function is the global `encodeURIComponent`, which will encode a JavaScript string
+into UTF-8 byte sequences and then URL-encode any that fall outside of the cookie range.
+
+##### expires
+
+Specifies the `Date` object to be the value for the [`Expires` `Set-Cookie` attribute][rfc-6265-5.2.1].
+By default, no expiration is set, and most clients will consider this a "non-persistent cookie" and
+will delete it on a condition like exiting a web browser application.
+
+**note** the [cookie storage model specification][rfc-6265-5.3] states that if both `expires` and
+`maxAge` are set, then `maxAge` takes precedence, but it is possible not all clients by obey this,
+so if both are set, they should point to the same date and time.
+
+##### httpOnly
+
+Specifies the `boolean` value for the [`HttpOnly` `Set-Cookie` attribute][rfc-6265-5.2.6]. When truthy,
+the `HttpOnly` attribute is set, otherwise it is not. By default, the `HttpOnly` attribute is not set.
+
+**note** be careful when setting this to `true`, as compliant clients will not allow client-side
+JavaScript to see the cookie in `document.cookie`.
+
+##### maxAge
+
+Specifies the `number` (in seconds) to be the value for the [`Max-Age` `Set-Cookie` attribute][rfc-6265-5.2.2].
+The given number will be converted to an integer by rounding down. By default, no maximum age is set.
+
+**note** the [cookie storage model specification][rfc-6265-5.3] states that if both `expires` and
+`maxAge` are set, then `maxAge` takes precedence, but it is possible not all clients by obey this,
+so if both are set, they should point to the same date and time.
+
+##### partitioned
+
+Specifies the `boolean` value for the [`Partitioned` `Set-Cookie`](rfc-cutler-httpbis-partitioned-cookies)
+attribute. When truthy, the `Partitioned` attribute is set, otherwise it is not. By default, the
+`Partitioned` attribute is not set.
+
+**note** This is an attribute that has not yet been fully standardized, and may change in the future.
+This also means many clients may ignore this attribute until they understand it.
+
+More information about can be found in [the proposal](https://github.com/privacycg/CHIPS).
+
+##### path
+
+Specifies the value for the [`Path` `Set-Cookie` attribute][rfc-6265-5.2.4]. By default, the path
+is considered the ["default path"][rfc-6265-5.1.4].
+
+##### priority
+
+Specifies the `string` to be the value for the [`Priority` `Set-Cookie` attribute][rfc-west-cookie-priority-00-4.1].
+
+  - `'low'` will set the `Priority` attribute to `Low`.
+  - `'medium'` will set the `Priority` attribute to `Medium`, the default priority when not set.
+  - `'high'` will set the `Priority` attribute to `High`.
+
+More information about the different priority levels can be found in
+[the specification][rfc-west-cookie-priority-00-4.1].
+
+**note** This is an attribute that has not yet been fully standardized, and may change in the future.
+This also means many clients may ignore this attribute until they understand it.
+
+##### sameSite
+
+Specifies the `boolean` or `string` to be the value for the [`SameSite` `Set-Cookie` attribute][rfc-6265bis-09-5.4.7].
+
+  - `true` will set the `SameSite` attribute to `Strict` for strict same site enforcement.
+  - `false` will not set the `SameSite` attribute.
+  - `'lax'` will set the `SameSite` attribute to `Lax` for lax same site enforcement.
+  - `'none'` will set the `SameSite` attribute to `None` for an explicit cross-site cookie.
+  - `'strict'` will set the `SameSite` attribute to `Strict` for strict same site enforcement.
+
+More information about the different enforcement levels can be found in
+[the specification][rfc-6265bis-09-5.4.7].
+
+**note** This is an attribute that has not yet been fully standardized, and may change in the future.
+This also means many clients may ignore this attribute until they understand it.
+
+##### secure
+
+Specifies the `boolean` value for the [`Secure` `Set-Cookie` attribute][rfc-6265-5.2.5]. When truthy,
+the `Secure` attribute is set, otherwise it is not. By default, the `Secure` attribute is not set.
+
+**note** be careful when setting this to `true`, as compliant clients will not send the cookie back to
+the server in the future if the browser does not have an HTTPS connection.
+
+## Example
+
+The following example uses this module in conjunction with the Node.js core HTTP server
+to prompt a user for their name and display it back on future visits.
+
+```js
+var cookie = require('cookie');
+var escapeHtml = require('escape-html');
+var http = require('http');
+var url = require('url');
+
+function onRequest(req, res) {
+  // Parse the query string
+  var query = url.parse(req.url, true, true).query;
+
+  if (query && query.name) {
+    // Set a new cookie with the name
+    res.setHeader('Set-Cookie', cookie.serialize('name', String(query.name), {
+      httpOnly: true,
+      maxAge: 60 * 60 * 24 * 7 // 1 week
+    }));
+
+    // Redirect back after setting cookie
+    res.statusCode = 302;
+    res.setHeader('Location', req.headers.referer || '/');
+    res.end();
     return;
   }
-  res.writeHead(404);
-  res.end();
-}).listen(8000, () => {
-  console.log('Listening for requests');
-});
+
+  // Parse the cookies on the request
+  var cookies = cookie.parse(req.headers.cookie || '');
+
+  // Get the visitor name set in the cookie
+  var name = cookies.name;
+
+  res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+
+  if (name) {
+    res.write('<p>Welcome back, <b>' + escapeHtml(name) + '</b>!</p>');
+  } else {
+    res.write('<p>Hello, new visitor!</p>');
+  }
+
+  res.write('<form method="GET">');
+  res.write('<input placeholder="enter your name" name="name"> <input type="submit" value="Set Name">');
+  res.end('</form>');
+}
+
+http.createServer(onRequest).listen(3000);
 ```
 
+## Testing
 
-# API
+```sh
+$ npm test
+```
 
-## Exports
+## Benchmark
 
-`busboy` exports a single function:
+```
+$ npm run bench
 
-**( _function_ )**(< _object_ >config) - Creates and returns a new _Writable_ form parser stream.
+> cookie@0.5.0 bench
+> node benchmark/index.js
 
-* Valid `config` properties:
+  node@18.18.2
+  acorn@8.10.0
+  ada@2.6.0
+  ares@1.19.1
+  brotli@1.0.9
+  cldr@43.1
+  icu@73.2
+  llhttp@6.0.11
+  modules@108
+  napi@9
+  nghttp2@1.57.0
+  nghttp3@0.7.0
+  ngtcp2@0.8.1
+  openssl@3.0.10+quic
+  simdutf@3.2.14
+  tz@2023c
+  undici@5.26.3
+  unicode@15.0
+  uv@1.44.2
+  uvwasi@0.0.18
+  v8@10.2.154.26-node.26
+  zlib@1.2.13.1-motley
 
-    * **headers** - _object_ - These are the HTTP headers of the incoming request, which are used by individual parsers.
+> node benchmark/parse-top.js
 
-    * **highWaterMark** - _integer_ - highWaterMark to use for the parser stream. **Default:** node's _stream.Writable_ default.
+  cookie.parse - top sites
 
-    * **fileHwm** - _integer_ - highWaterMark to use for individual file streams. **Default:** node's _stream.Readable_ default.
+  14 tests completed.
 
-    * **defCharset** - _string_ - Default character set to use when one isn't defined. **Default:** `'utf8'`.
+  parse accounts.google.com x 2,588,913 ops/sec ±0.74% (186 runs sampled)
+  parse apple.com           x 2,370,002 ops/sec ±0.69% (186 runs sampled)
+  parse cloudflare.com      x 2,213,102 ops/sec ±0.88% (188 runs sampled)
+  parse docs.google.com     x 2,194,157 ops/sec ±1.03% (184 runs sampled)
+  parse drive.google.com    x 2,265,084 ops/sec ±0.79% (187 runs sampled)
+  parse en.wikipedia.org    x   457,099 ops/sec ±0.81% (186 runs sampled)
+  parse linkedin.com        x   504,407 ops/sec ±0.89% (186 runs sampled)
+  parse maps.google.com     x 1,230,959 ops/sec ±0.98% (186 runs sampled)
+  parse microsoft.com       x   926,294 ops/sec ±0.88% (184 runs sampled)
+  parse play.google.com     x 2,311,338 ops/sec ±0.83% (185 runs sampled)
+  parse support.google.com  x 1,508,850 ops/sec ±0.86% (186 runs sampled)
+  parse www.google.com      x 1,022,582 ops/sec ±1.32% (182 runs sampled)
+  parse youtu.be            x   332,136 ops/sec ±1.02% (185 runs sampled)
+  parse youtube.com         x   323,833 ops/sec ±0.77% (183 runs sampled)
 
-    * **defParamCharset** - _string_ - For multipart forms, the default character set to use for values of part header parameters (e.g. filename) that are not extended parameters (that contain an explicit charset). **Default:** `'latin1'`.
+> node benchmark/parse.js
 
-    * **preservePath** - _boolean_ - If paths in filenames from file parts in a `'multipart/form-data'` request shall be preserved. **Default:** `false`.
+  cookie.parse - generic
 
-    * **limits** - _object_ - Various limits on incoming data. Valid properties are:
+  6 tests completed.
 
-        * **fieldNameSize** - _integer_ - Max field name size (in bytes). **Default:** `100`.
+  simple      x 3,214,032 ops/sec ±1.61% (183 runs sampled)
+  decode      x   587,237 ops/sec ±1.16% (187 runs sampled)
+  unquote     x 2,954,618 ops/sec ±1.35% (183 runs sampled)
+  duplicates  x   857,008 ops/sec ±0.89% (187 runs sampled)
+  10 cookies  x   292,133 ops/sec ±0.89% (187 runs sampled)
+  100 cookies x    22,610 ops/sec ±0.68% (187 runs sampled)
+```
 
-        * **fieldSize** - _integer_ - Max field value size (in bytes). **Default:** `1048576` (1MB).
+## References
 
-        * **fields** - _integer_ - Max number of non-file fields. **Default:** `Infinity`.
+- [RFC 6265: HTTP State Management Mechanism][rfc-6265]
+- [Same-site Cookies][rfc-6265bis-09-5.4.7]
 
-        * **fileSize** - _integer_ - For multipart forms, the max file size (in bytes). **Default:** `Infinity`.
+[rfc-cutler-httpbis-partitioned-cookies]: https://tools.ietf.org/html/draft-cutler-httpbis-partitioned-cookies/
+[rfc-west-cookie-priority-00-4.1]: https://tools.ietf.org/html/draft-west-cookie-priority-00#section-4.1
+[rfc-6265bis-09-5.4.7]: https://tools.ietf.org/html/draft-ietf-httpbis-rfc6265bis-09#section-5.4.7
+[rfc-6265]: https://tools.ietf.org/html/rfc6265
+[rfc-6265-5.1.4]: https://tools.ietf.org/html/rfc6265#section-5.1.4
+[rfc-6265-5.2.1]: https://tools.ietf.org/html/rfc6265#section-5.2.1
+[rfc-6265-5.2.2]: https://tools.ietf.org/html/rfc6265#section-5.2.2
+[rfc-6265-5.2.3]: https://tools.ietf.org/html/rfc6265#section-5.2.3
+[rfc-6265-5.2.4]: https://tools.ietf.org/html/rfc6265#section-5.2.4
+[rfc-6265-5.2.5]: https://tools.ietf.org/html/rfc6265#section-5.2.5
+[rfc-6265-5.2.6]: https://tools.ietf.org/html/rfc6265#section-5.2.6
+[rfc-6265-5.3]: https://tools.ietf.org/html/rfc6265#section-5.3
 
-        * **files** - _integer_ - For multipart forms, the max number of file fields. **Default:** `Infinity`.
+## License
 
-        * **parts** - _integer_ - For multipart forms, the max number of parts (fields + files). **Default:** `Infinity`.
+[MIT](LICENSE)
 
-        * **headerPairs** - _integer_ - For multipart forms, the max number of header key-value pairs to parse. **Default:** `2000` (same as node's http module).
-
-This function can throw exceptions if there is something wrong with the values in `config`. For example, if the Content-Type in `headers` is missing entirely, is not a supported type, or is missing the boundary for `'multipart/form-data'` requests.
-
-## (Special) Parser stream events
-
-* **file**(< _string_ >name, < _Readable_ >stream, < _object_ >info) - Emitted for each new file found. `name` contains the form field name. `stream` is a _Readable_ stream containing the file's data. No transformations/conversions (e.g. base64 to raw binary) are done on the file's data. `info` contains the following properties:
-
-    * `filename` - _string_ - If supplied, this contains the file's filename. **WARNING:** You should almost _never_ use this value as-is (especially if you are using `preservePath: true` in your `config`) as it could contain malicious input. You are better off generating your own (safe) filenames, or at the very least using a hash of the filename.
-
-    * `encoding` - _string_ - The file's `'Content-Transfer-Encoding'` value.
-
-    * `mimeType` - _string_ - The file's `'Content-Type'` value.
-
-    **Note:** If you listen for this event, you should always consume the `stream` whether you care about its contents or not (you can simply do `stream.resume();` if you want to discard/skip the contents), otherwise the `'finish'`/`'close'` event will never fire on the busboy parser stream.
-    However, if you aren't accepting files, you can either simply not listen for the `'file'` event at all or set `limits.files` to `0`, and any/all files will be automatically skipped (these skipped files will still count towards any configured `limits.files` and `limits.parts` limits though).
-
-    **Note:** If a configured `limits.fileSize` limit was reached for a file, `stream` will both have a boolean property `truncated` set to `true` (best checked at the end of the stream) and emit a `'limit'` event to notify you when this happens.
-
-* **field**(< _string_ >name, < _string_ >value, < _object_ >info) - Emitted for each new non-file field found. `name` contains the form field name. `value` contains the string value of the field. `info` contains the following properties:
-
-    * `nameTruncated` - _boolean_ - Whether `name` was truncated or not (due to a configured `limits.fieldNameSize` limit)
-
-    * `valueTruncated` - _boolean_ - Whether `value` was truncated or not (due to a configured `limits.fieldSize` limit)
-
-    * `encoding` - _string_ - The field's `'Content-Transfer-Encoding'` value.
-
-    * `mimeType` - _string_ - The field's `'Content-Type'` value.
-
-* **partsLimit**() - Emitted when the configured `limits.parts` limit has been reached. No more `'file'` or `'field'` events will be emitted.
-
-* **filesLimit**() - Emitted when the configured `limits.files` limit has been reached. No more `'file'` events will be emitted.
-
-* **fieldsLimit**() - Emitted when the configured `limits.fields` limit has been reached. No more `'field'` events will be emitted.
+[ci-image]: https://badgen.net/github/checks/jshttp/cookie/master?label=ci
+[ci-url]: https://github.com/jshttp/cookie/actions/workflows/ci.yml
+[coveralls-image]: https://badgen.net/coveralls/c/github/jshttp/cookie/master
+[coveralls-url]: https://coveralls.io/r/jshttp/cookie?branch=master
+[node-image]: https://badgen.net/npm/node/cookie
+[node-url]: https://nodejs.org/en/download
+[npm-downloads-image]: https://badgen.net/npm/dm/cookie
+[npm-url]: https://npmjs.org/package/cookie
+[npm-version-image]: https://badgen.net/npm/v/cookie
