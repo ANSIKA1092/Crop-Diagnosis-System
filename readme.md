@@ -1,29 +1,69 @@
-# saslprep
+# Buffer From
 
-_Note: This is a fork of the original [`saslprep`](https://www.npmjs.com/package/saslprep) npm package
-and provides equivalent functionality._
+A [ponyfill](https://ponyfill.com) for `Buffer.from`, uses native implementation if available.
 
-Stringprep Profile for User Names and Passwords, [rfc4013](https://tools.ietf.org/html/rfc4013)
+## Installation
 
-### Usage
-
-```js
-const saslprep = require('@mongodb-js/saslprep');
-
-saslprep('password\u00AD'); // password
-saslprep('password\u0007'); // Error: prohibited character
+```sh
+npm install --save buffer-from
 ```
 
-### API
+## Usage
 
-##### `saslprep(input: String, opts: Options): String`
+```js
+const bufferFrom = require('buffer-from')
 
-Normalize user name or password.
+console.log(bufferFrom([1, 2, 3, 4]))
+//=> <Buffer 01 02 03 04>
 
-##### `Options.allowUnassigned: bool`
+const arr = new Uint8Array([1, 2, 3, 4])
+console.log(bufferFrom(arr.buffer, 1, 2))
+//=> <Buffer 02 03>
 
-A special behavior for unassigned code points, see https://tools.ietf.org/html/rfc4013#section-2.5. Disabled by default.
+console.log(bufferFrom('test', 'utf8'))
+//=> <Buffer 74 65 73 74>
 
-## License
+const buf = bufferFrom('test')
+console.log(bufferFrom(buf))
+//=> <Buffer 74 65 73 74>
+```
 
-MIT, 2017-2019 (c) Dmitriy Tsvettsikh
+## API
+
+### bufferFrom(array)
+
+- `array` &lt;Array&gt;
+
+Allocates a new `Buffer` using an `array` of octets.
+
+### bufferFrom(arrayBuffer[, byteOffset[, length]])
+
+- `arrayBuffer` &lt;ArrayBuffer&gt; The `.buffer` property of a TypedArray or ArrayBuffer
+- `byteOffset` &lt;Integer&gt; Where to start copying from `arrayBuffer`. **Default:** `0`
+- `length` &lt;Integer&gt; How many bytes to copy from `arrayBuffer`. **Default:** `arrayBuffer.length - byteOffset`
+
+When passed a reference to the `.buffer` property of a TypedArray instance, the
+newly created `Buffer` will share the same allocated memory as the TypedArray.
+
+The optional `byteOffset` and `length` arguments specify a memory range within
+the `arrayBuffer` that will be shared by the `Buffer`.
+
+### bufferFrom(buffer)
+
+- `buffer` &lt;Buffer&gt; An existing `Buffer` to copy data from
+
+Copies the passed `buffer` data onto a new `Buffer` instance.
+
+### bufferFrom(string[, encoding])
+
+- `string` &lt;String&gt; A string to encode.
+- `encoding` &lt;String&gt; The encoding of `string`. **Default:** `'utf8'`
+
+Creates a new `Buffer` containing the given JavaScript string `string`. If
+provided, the `encoding` parameter identifies the character encoding of
+`string`.
+
+## See also
+
+- [buffer-alloc](https://github.com/LinusU/buffer-alloc) A ponyfill for `Buffer.alloc`
+- [buffer-alloc-unsafe](https://github.com/LinusU/buffer-alloc-unsafe) A ponyfill for `Buffer.allocUnsafe`

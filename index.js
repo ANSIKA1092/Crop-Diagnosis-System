@@ -1,80 +1,72 @@
-/*!
- * body-parser
- * Copyright(c) 2014-2015 Douglas Christopher Wilson
- * MIT Licensed
- */
+/* eslint-disable node/no-deprecated-api */
 
-'use strict'
+var toString = Object.prototype.toString
 
-/**
- * @typedef Parsers
- * @type {function}
- * @property {function} json
- * @property {function} raw
- * @property {function} text
- * @property {function} urlencoded
- */
+var isModern = (
+  typeof Buffer !== 'undefined' &&
+  typeof Buffer.alloc === 'function' &&
+  typeof Buffer.allocUnsafe === 'function' &&
+  typeof Buffer.from === 'function'
+)
 
-/**
- * Module exports.
- * @type {Parsers}
- */
-
-exports = module.exports = bodyParser
-
-/**
- * JSON parser.
- * @public
- */
-
-Object.defineProperty(exports, 'json', {
-  configurable: true,
-  enumerable: true,
-  get: () => require('./lib/types/json')
-})
-
-/**
- * Raw parser.
- * @public
- */
-
-Object.defineProperty(exports, 'raw', {
-  configurable: true,
-  enumerable: true,
-  get: () => require('./lib/types/raw')
-})
-
-/**
- * Text parser.
- * @public
- */
-
-Object.defineProperty(exports, 'text', {
-  configurable: true,
-  enumerable: true,
-  get: () => require('./lib/types/text')
-})
-
-/**
- * URL-encoded parser.
- * @public
- */
-
-Object.defineProperty(exports, 'urlencoded', {
-  configurable: true,
-  enumerable: true,
-  get: () => require('./lib/types/urlencoded')
-})
-
-/**
- * Create a middleware to parse json and urlencoded bodies.
- *
- * @param {object} [options]
- * @return {function}
- * @deprecated
- * @public
- */
-
-function bodyParser () {
-  throw new Error('The bodyParser() generic has been split into individual middleware to use instead.')
+function isArrayBuffer (input) {
+  return toString.call(input).slice(8, -1) === 'ArrayBuffer'
 }
+
+function fromArrayBuffer (obj, byteOffset, length) {
+  byteOffset >>>= 0
+
+  var maxLength = obj.byteLength - byteOffset
+
+  if (maxLength < 0) {
+    throw new RangeError("'offset' is out of bounds")
+  }
+
+  if (length === undefined) {
+    length = maxLength
+  } else {
+    length >>>= 0
+
+    if (length > maxLength) {
+      throw new RangeError("'length' is out of bounds")
+    }
+  }
+
+  return isModern
+    ? Buffer.from(obj.slice(byteOffset, byteOffset + length))
+    : new Buffer(new Uint8Array(obj.slice(byteOffset, byteOffset + length)))
+}
+
+function fromString (string, encoding) {
+  if (typeof encoding !== 'string' || encoding === '') {
+    encoding = 'utf8'
+  }
+
+  if (!Buffer.isEncoding(encoding)) {
+    throw new TypeError('"encoding" must be a valid string encoding')
+  }
+
+  return isModern
+    ? Buffer.from(string, encoding)
+    : new Buffer(string, encoding)
+}
+
+function bufferFrom (value, encodingOrOffset, length) {
+  if (typeof value === 'number') {
+    throw new TypeError('"value" argument must not be a number')
+  }
+
+  if (isArrayBuffer(value)) {
+    return fromArrayBuffer(value, encodingOrOffset, length)
+  }
+
+  if (typeof value === 'string') {
+    return fromString(value, encodingOrOffset)
+  }
+
+  return isModern
+    ? Buffer.from(value)
+    : new Buffer(value)
+}
+
+module.exports = bufferFrom
