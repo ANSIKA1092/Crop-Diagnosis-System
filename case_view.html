@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Case View - Crop Diagnosis System</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(to right, #f1f8e9, #ffffff);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    h2 {
+      text-align: center;
+      color: #558b2f;
+      margin-bottom: 30px;
+      font-size: 2em;
+    }
+
+    #caseDetails {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+
+    #caseDetails h3 {
+      color: #33691e;
+      margin-bottom: 15px;
+      font-size: 1.5em;
+    }
+
+    #caseDetails p {
+      color: #444;
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+
+    #caseDetails div {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+
+    #caseDetails img {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      max-width: 200px;
+      height: auto;
+    }
+
+    footer {
+      margin-top: 40px;
+      text-align: center;
+      font-size: 0.9em;
+      color: #777;
+    }
+  </style>
+</head>
+<body>
+  <h2>Case Details</h2>
+  <div id="caseDetails"></div>
+
+  <footer>© 2025 Crop Diagnosis System. Case Viewer</footer>
+
+  <script>
+    const caseId = "CASE_ID"; // Replace with dynamic ID
+    async function loadCase() {
+      const res = await fetch(`http://localhost:3000/api/cases/${caseId}`);
+      const data = await res.json();
+      const div = document.getElementById('caseDetails');
+      div.innerHTML = `
+        <h3>${data.cropType} – ${data.location}</h3>
+        <p>${data.description}</p>
+        <div>
+          ${data.images.map(img => `<img src="http://localhost:3000/${img}" alt="Crop Image" />`).join('')}
+        </div>
+      `;
+    }
+    loadCase();
+  </script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Farmer Dashboard - Crop Diagnosis System</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(to right, #e8f5e9, #ffffff);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      padding: 20px;
+    }
+
+    .dashboard-box {
+      background-color: #ffffff;
+      padding: 40px 50px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 500px;
+    }
+
+    h2 {
+      color: #2e7d32;
+      margin-bottom: 25px;
+      text-align: center;
+      font-size: 2em;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    input[type="text"],
+    input[type="file"],
+    textarea,
+    button {
+      font-size: 1em;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+    }
+
+    button {
+      background-color: #388e3c;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #2e7d32;
+    }
+
+    footer {
+      margin-top: 20px;
+      font-size: 0.9em;
+      color: #777;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-box">
+    <h2>Submit Crop Issue</h2>
+    <form id="caseForm" enctype="multipart/form-data">
+      <input type="text" name="cropType" placeholder="Crop Type" required />
+      <textarea name="description" placeholder="Describe the issue" required></textarea>
+      <input type="text" name="location" placeholder="Location" required />
+      <input type="file" name="images" multiple required />
+      <button type="submit">Submit Case</button>
+    </form>
+  </div>
+
+  <footer>© 2025 Crop Diagnosis System. All rights reserved.</footer>
+
+  <script>
+    document.getElementById('caseForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const res = await fetch('http://localhost:3000/api/cases', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      alert('Case submitted: ' + data.caseId);
+    });
+  </script>
+</body>
+</html>
