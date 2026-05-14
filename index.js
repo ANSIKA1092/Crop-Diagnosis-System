@@ -1,234 +1,183 @@
-/*!
- * on-finished
- * Copyright(c) 2013 Jonathan Ong
- * Copyright(c) 2014 Douglas Christopher Wilson
- * MIT Licensed
- */
+"use strict"
 
-'use strict'
+var Buffer = require("safer-buffer").Buffer
 
-/**
- * Module exports.
- * @public
- */
+var bomHandling = require("./bom-handling")
+var mergeModules = require("./helpers/merge-exports")
+var iconv = module.exports
 
-module.exports = onFinished
-module.exports.isFinished = isFinished
+// All codecs and aliases are kept here, keyed by encoding name/alias.
+// They are lazy loaded in `iconv.getCodec` from `encodings/index.js`.
+// Cannot initialize with { __proto__: null } because Boolean({ __proto__: null }) === true
+iconv.encodings = null
 
-/**
- * Module dependencies.
- * @private
- */
+// Characters emitted in case of error.
+iconv.defaultCharUnicode = "�"
+iconv.defaultCharSingleByte = "?"
 
-var asyncHooks = tryRequireAsyncHooks()
-var first = require('ee-first')
+// Public API.
+iconv.encode = function encode (str, encoding, options) {
+  str = "" + (str || "") // Ensure string.
 
-/**
- * Variables.
- * @private
- */
+  var encoder = iconv.getEncoder(encoding, options)
 
-/* istanbul ignore next */
-var defer = typeof setImmediate === 'function'
-  ? setImmediate
-  : function (fn) { process.nextTick(fn.bind.apply(fn, arguments)) }
+  var res = encoder.write(str)
+  var trail = encoder.end()
 
-/**
- * Invoke callback when the response has finished, useful for
- * cleaning up resources afterwards.
- *
- * @param {object} msg
- * @param {function} listener
- * @return {object}
- * @public
- */
-
-function onFinished (msg, listener) {
-  if (isFinished(msg) !== false) {
-    defer(listener, null, msg)
-    return msg
-  }
-
-  // attach the listener to the message
-  attachListener(msg, wrap(listener))
-
-  return msg
+  return (trail && trail.length > 0) ? Buffer.concat([res, trail]) : res
 }
 
-/**
- * Determine if message is already finished.
- *
- * @param {object} msg
- * @return {boolean}
- * @public
- */
+iconv.decode = function decode (buf, encoding, options) {
+  if (typeof buf === "string") {
+    if (!iconv.skipDecodeWarning) {
+      console.error("Iconv-lite warning: decode()-ing strings is deprecated. Refer to https://github.com/ashtuchkin/iconv-lite/wiki/Use-Buffers-when-decoding")
+      iconv.skipDecodeWarning = true
+    }
 
-function isFinished (msg) {
-  var socket = msg.socket
-
-  if (typeof msg.finished === 'boolean') {
-    // OutgoingMessage
-    return Boolean(msg.finished || (socket && !socket.writable))
+    buf = Buffer.from("" + (buf || ""), "binary") // Ensure buffer.
   }
 
-  if (typeof msg.complete === 'boolean') {
-    // IncomingMessage
-    return Boolean(msg.upgrade || !socket || !socket.readable || (msg.complete && !msg.readable))
-  }
+  var decoder = iconv.getDecoder(encoding, options)
 
-  // don't know
-  return undefined
+  var res = decoder.write(buf)
+  var trail = decoder.end()
+
+  return trail ? (res + trail) : res
 }
 
-/**
- * Attach a finished listener to the message.
- *
- * @param {object} msg
- * @param {function} callback
- * @private
- */
-
-function attachFinishedListener (msg, callback) {
-  var eeMsg
-  var eeSocket
-  var finished = false
-
-  function onFinish (error) {
-    eeMsg.cancel()
-    eeSocket.cancel()
-
-    finished = true
-    callback(error)
-  }
-
-  // finished on first message event
-  eeMsg = eeSocket = first([[msg, 'end', 'finish']], onFinish)
-
-  function onSocket (socket) {
-    // remove listener
-    msg.removeListener('socket', onSocket)
-
-    if (finished) return
-    if (eeMsg !== eeSocket) return
-
-    // finished on first socket event
-    eeSocket = first([[socket, 'error', 'close']], onFinish)
-  }
-
-  if (msg.socket) {
-    // socket already assigned
-    onSocket(msg.socket)
-    return
-  }
-
-  // wait for socket to be assigned
-  msg.on('socket', onSocket)
-
-  if (msg.socket === undefined) {
-    // istanbul ignore next: node.js 0.8 patch
-    patchAssignSocket(msg, onSocket)
+iconv.encodingExists = function encodingExists (enc) {
+  try {
+    iconv.getCodec(enc)
+    return true
+  } catch (e) {
+    return false
   }
 }
 
-/**
- * Attach the listener to the message.
- *
- * @param {object} msg
- * @return {function}
- * @private
- */
+// Legacy aliases to convert functions
+iconv.toEncoding = iconv.encode
+iconv.fromEncoding = iconv.decode
 
-function attachListener (msg, listener) {
-  var attached = msg.__onFinished
+// Search for a codec in iconv.encodings. Cache codec data in iconv._codecDataCache.
+iconv._codecDataCache = { __proto__: null }
 
-  // create a private single listener with queue
-  if (!attached || !attached.queue) {
-    attached = msg.__onFinished = createListener(msg)
-    attachFinishedListener(msg, attached)
+iconv.getCodec = function getCodec (encoding) {
+  if (!iconv.encodings) {
+    var raw = require("../encodings")
+    // TODO: In future versions when old nodejs support is removed can use object.assign
+    iconv.encodings = { __proto__: null } // Initialize as empty object.
+    mergeModules(iconv.encodings, raw)
   }
 
-  attached.queue.push(listener)
-}
+  // Canonicalize encoding name: strip all non-alphanumeric chars and appended year.
+  var enc = iconv._canonicalizeEncoding(encoding)
 
-/**
- * Create listener on message.
- *
- * @param {object} msg
- * @return {function}
- * @private
- */
+  // Traverse iconv.encodings to find actual codec.
+  var codecOptions = {}
+  while (true) {
+    var codec = iconv._codecDataCache[enc]
 
-function createListener (msg) {
-  function listener (err) {
-    if (msg.__onFinished === listener) msg.__onFinished = null
-    if (!listener.queue) return
+    if (codec) { return codec }
 
-    var queue = listener.queue
-    listener.queue = null
+    var codecDef = iconv.encodings[enc]
 
-    for (var i = 0; i < queue.length; i++) {
-      queue[i](err, msg)
+    switch (typeof codecDef) {
+      case "string": // Direct alias to other encoding.
+        enc = codecDef
+        break
+
+      case "object": // Alias with options. Can be layered.
+        for (var key in codecDef) { codecOptions[key] = codecDef[key] }
+
+        if (!codecOptions.encodingName) { codecOptions.encodingName = enc }
+
+        enc = codecDef.type
+        break
+
+      case "function": // Codec itself.
+        if (!codecOptions.encodingName) { codecOptions.encodingName = enc }
+
+        // The codec function must load all tables and return object with .encoder and .decoder methods.
+        // It'll be called only once (for each different options object).
+        //
+        codec = new codecDef(codecOptions, iconv)
+
+        iconv._codecDataCache[codecOptions.encodingName] = codec // Save it to be reused later.
+        return codec
+
+      default:
+        throw new Error("Encoding not recognized: '" + encoding + "' (searched as: '" + enc + "')")
     }
   }
-
-  listener.queue = []
-
-  return listener
 }
 
-/**
- * Patch ServerResponse.prototype.assignSocket for node.js 0.8.
- *
- * @param {ServerResponse} res
- * @param {function} callback
- * @private
- */
+iconv._canonicalizeEncoding = function (encoding) {
+  // Canonicalize encoding name: strip all non-alphanumeric chars and appended year.
+  return ("" + encoding).toLowerCase().replace(/:\d{4}$|[^0-9a-z]/g, "")
+}
 
-// istanbul ignore next: node.js 0.8 patch
-function patchAssignSocket (res, callback) {
-  var assignSocket = res.assignSocket
+iconv.getEncoder = function getEncoder (encoding, options) {
+  var codec = iconv.getCodec(encoding)
+  var encoder = new codec.encoder(options, codec)
 
-  if (typeof assignSocket !== 'function') return
+  if (codec.bomAware && options && options.addBOM) { encoder = new bomHandling.PrependBOM(encoder, options) }
 
-  // res.on('socket', callback) is broken in 0.8
-  res.assignSocket = function _assignSocket (socket) {
-    assignSocket.call(this, socket)
-    callback(socket)
+  return encoder
+}
+
+iconv.getDecoder = function getDecoder (encoding, options) {
+  var codec = iconv.getCodec(encoding)
+  var decoder = new codec.decoder(options, codec)
+
+  if (codec.bomAware && !(options && options.stripBOM === false)) { decoder = new bomHandling.StripBOM(decoder, options) }
+
+  return decoder
+}
+
+// Streaming API
+// NOTE: Streaming API naturally depends on 'stream' module from Node.js. Unfortunately in browser environments this module can add
+// up to 100Kb to the output bundle. To avoid unnecessary code bloat, we don't enable Streaming API in browser by default.
+// If you would like to enable it explicitly, please add the following code to your app:
+// > iconv.enableStreamingAPI(require('stream'));
+iconv.enableStreamingAPI = function enableStreamingAPI (streamModule) {
+  if (iconv.supportsStreams) { return }
+
+  // Dependency-inject stream module to create IconvLite stream classes.
+  var streams = require("./streams")(streamModule)
+
+  // Not public API yet, but expose the stream classes.
+  iconv.IconvLiteEncoderStream = streams.IconvLiteEncoderStream
+  iconv.IconvLiteDecoderStream = streams.IconvLiteDecoderStream
+
+  // Streaming API.
+  iconv.encodeStream = function encodeStream (encoding, options) {
+    return new iconv.IconvLiteEncoderStream(iconv.getEncoder(encoding, options), options)
+  }
+
+  iconv.decodeStream = function decodeStream (encoding, options) {
+    return new iconv.IconvLiteDecoderStream(iconv.getDecoder(encoding, options), options)
+  }
+
+  iconv.supportsStreams = true
+}
+
+// Enable Streaming API automatically if 'stream' module is available and non-empty (the majority of environments).
+var streamModule
+try {
+  streamModule = require("stream")
+} catch (e) {}
+
+if (streamModule && streamModule.Transform) {
+  iconv.enableStreamingAPI(streamModule)
+} else {
+  // In rare cases where 'stream' module is not available by default, throw a helpful exception.
+  iconv.encodeStream = iconv.decodeStream = function () {
+    throw new Error("iconv-lite Streaming API is not enabled. Use iconv.enableStreamingAPI(require('stream')); to enable it.")
   }
 }
 
-/**
- * Try to require async_hooks
- * @private
- */
-
-function tryRequireAsyncHooks () {
-  try {
-    return require('async_hooks')
-  } catch (e) {
-    return {}
-  }
-}
-
-/**
- * Wrap function with async resource, if possible.
- * AsyncResource.bind static method backported.
- * @private
- */
-
-function wrap (fn) {
-  var res
-
-  // create anonymous resource
-  if (asyncHooks.AsyncResource) {
-    res = new asyncHooks.AsyncResource(fn.name || 'bound-anonymous-fn')
-  }
-
-  // incompatible node.js
-  if (!res || !res.runInAsyncScope) {
-    return fn
-  }
-
-  // return bound function
-  return res.runInAsyncScope.bind(res, fn, null)
+// Some environments, such as browsers, may not load JavaScript files as UTF-8
+// eslint-disable-next-line no-constant-condition
+if ("Ā" !== "\u0100") {
+  console.error("iconv-lite warning: js files use non-utf8 encoding. See https://github.com/ashtuchkin/iconv-lite/wiki/Javascript-source-file-encodings for more info.")
 }

@@ -1,162 +1,106 @@
-# on-finished
+# readable-stream
 
-[![NPM Version][npm-version-image]][npm-url]
-[![NPM Downloads][npm-downloads-image]][npm-url]
-[![Node.js Version][node-image]][node-url]
-[![Build Status][ci-image]][ci-url]
-[![Coverage Status][coveralls-image]][coveralls-url]
+***Node.js core streams for userland*** [![Build Status](https://travis-ci.com/nodejs/readable-stream.svg?branch=master)](https://travis-ci.com/nodejs/readable-stream)
 
-Execute a callback when a HTTP request closes, finishes, or errors.
 
-## Install
+[![NPM](https://nodei.co/npm/readable-stream.png?downloads=true&downloadRank=true)](https://nodei.co/npm/readable-stream/)
+[![NPM](https://nodei.co/npm-dl/readable-stream.png?&months=6&height=3)](https://nodei.co/npm/readable-stream/)
 
-This is a [Node.js](https://nodejs.org/en/) module available through the
-[npm registry](https://www.npmjs.com/). Installation is done using the
-[`npm install` command](https://docs.npmjs.com/getting-started/installing-npm-packages-locally):
 
-```sh
-$ npm install on-finished
+[![Sauce Test Status](https://saucelabs.com/browser-matrix/readabe-stream.svg)](https://saucelabs.com/u/readabe-stream)
+
+```bash
+npm install --save readable-stream
 ```
 
-## API
+This package is a mirror of the streams implementations in Node.js.
+
+Full documentation may be found on the [Node.js website](https://nodejs.org/dist/v10.18.1/docs/api/stream.html).
+
+If you want to guarantee a stable streams base, regardless of what version of
+Node you, or the users of your libraries are using, use **readable-stream** *only* and avoid the *"stream"* module in Node-core, for background see [this blogpost](http://r.va.gg/2014/06/why-i-dont-use-nodes-core-stream-module.html).
+
+As of version 2.0.0 **readable-stream** uses semantic versioning.
+
+## Version 3.x.x
+
+v3.x.x of `readable-stream` is a cut from Node 10. This version supports Node 6, 8, and 10, as well as evergreen browsers, IE 11 and latest Safari. The breaking changes introduced by v3 are composed by the combined breaking changes in [Node v9](https://nodejs.org/en/blog/release/v9.0.0/) and [Node v10](https://nodejs.org/en/blog/release/v10.0.0/), as follows:
+
+1. Error codes: https://github.com/nodejs/node/pull/13310,
+   https://github.com/nodejs/node/pull/13291,
+   https://github.com/nodejs/node/pull/16589,
+   https://github.com/nodejs/node/pull/15042,
+   https://github.com/nodejs/node/pull/15665,
+   https://github.com/nodejs/readable-stream/pull/344
+2. 'readable' have precedence over flowing
+   https://github.com/nodejs/node/pull/18994
+3. make virtual methods errors consistent
+   https://github.com/nodejs/node/pull/18813
+4. updated streams error handling
+   https://github.com/nodejs/node/pull/18438
+5. writable.end should return this.
+   https://github.com/nodejs/node/pull/18780
+6. readable continues to read when push('')
+   https://github.com/nodejs/node/pull/18211
+7. add custom inspect to BufferList
+   https://github.com/nodejs/node/pull/17907
+8. always defer 'readable' with nextTick
+   https://github.com/nodejs/node/pull/17979
+
+## Version 2.x.x
+v2.x.x of `readable-stream` is a cut of the stream module from Node 8 (there have been no semver-major changes from Node 4 to 8). This version supports all Node.js versions from 0.8, as well as evergreen browsers and IE 10 & 11.
+
+### Big Thanks
+
+Cross-browser Testing Platform and Open Source <3 Provided by [Sauce Labs][sauce]
+
+# Usage
+
+You can swap your `require('stream')` with `require('readable-stream')`
+without any changes, if you are just using one of the main classes and
+functions.
 
 ```js
-var onFinished = require('on-finished')
-```
+const {
+  Readable,
+  Writable,
+  Transform,
+  Duplex,
+  pipeline,
+  finished
+} = require('readable-stream')
+````
 
-### onFinished(res, listener)
+Note that `require('stream')` will return `Stream`, while
+`require('readable-stream')` will return `Readable`. We discourage using
+whatever is exported directly, but rather use one of the properties as
+shown in the example above.
 
-Attach a listener to listen for the response to finish. The listener will
-be invoked only once when the response finished. If the response finished
-to an error, the first argument will contain the error. If the response
-has already finished, the listener will be invoked.
+# Streams Working Group
 
-Listening to the end of a response would be used to close things associated
-with the response, like open files.
+`readable-stream` is maintained by the Streams Working Group, which
+oversees the development and maintenance of the Streams API within
+Node.js. The responsibilities of the Streams Working Group include:
 
-Listener is invoked as `listener(err, res)`.
+* Addressing stream issues on the Node.js issue tracker.
+* Authoring and editing stream documentation within the Node.js project.
+* Reviewing changes to stream subclasses within the Node.js project.
+* Redirecting changes to streams from the Node.js project to this
+  project.
+* Assisting in the implementation of stream providers within Node.js.
+* Recommending versions of `readable-stream` to be included in Node.js.
+* Messaging about the future of streams to give the community advance
+  notice of changes.
 
-<!-- eslint-disable handle-callback-err -->
+<a name="members"></a>
+## Team Members
 
-```js
-onFinished(res, function (err, res) {
-  // clean up open fds, etc.
-  // err contains the error if request error'd
-})
-```
+* **Calvin Metcalf** ([@calvinmetcalf](https://github.com/calvinmetcalf)) &lt;calvin.metcalf@gmail.com&gt;
+  - Release GPG key: F3EF5F62A87FC27A22E643F714CE4FF5015AA242
+* **Mathias Buus** ([@mafintosh](https://github.com/mafintosh)) &lt;mathiasbuus@gmail.com&gt;
+* **Matteo Collina** ([@mcollina](https://github.com/mcollina)) &lt;matteo.collina@gmail.com&gt;
+  - Release GPG key: 3ABC01543F22DD2239285CDD818674489FBC127E
+* **Irina Shestak** ([@lrlna](https://github.com/lrlna)) &lt;shestak.irina@gmail.com&gt;
+* **Yoshua Wyuts** ([@yoshuawuyts](https://github.com/yoshuawuyts)) &lt;yoshuawuyts@gmail.com&gt;
 
-### onFinished(req, listener)
-
-Attach a listener to listen for the request to finish. The listener will
-be invoked only once when the request finished. If the request finished
-to an error, the first argument will contain the error. If the request
-has already finished, the listener will be invoked.
-
-Listening to the end of a request would be used to know when to continue
-after reading the data.
-
-Listener is invoked as `listener(err, req)`.
-
-<!-- eslint-disable handle-callback-err -->
-
-```js
-var data = ''
-
-req.setEncoding('utf8')
-req.on('data', function (str) {
-  data += str
-})
-
-onFinished(req, function (err, req) {
-  // data is read unless there is err
-})
-```
-
-### onFinished.isFinished(res)
-
-Determine if `res` is already finished. This would be useful to check and
-not even start certain operations if the response has already finished.
-
-### onFinished.isFinished(req)
-
-Determine if `req` is already finished. This would be useful to check and
-not even start certain operations if the request has already finished.
-
-## Special Node.js requests
-
-### HTTP CONNECT method
-
-The meaning of the `CONNECT` method from RFC 7231, section 4.3.6:
-
-> The CONNECT method requests that the recipient establish a tunnel to
-> the destination origin server identified by the request-target and,
-> if successful, thereafter restrict its behavior to blind forwarding
-> of packets, in both directions, until the tunnel is closed.  Tunnels
-> are commonly used to create an end-to-end virtual connection, through
-> one or more proxies, which can then be secured using TLS (Transport
-> Layer Security, [RFC5246]).
-
-In Node.js, these request objects come from the `'connect'` event on
-the HTTP server.
-
-When this module is used on a HTTP `CONNECT` request, the request is
-considered "finished" immediately, **due to limitations in the Node.js
-interface**. This means if the `CONNECT` request contains a request entity,
-the request will be considered "finished" even before it has been read.
-
-There is no such thing as a response object to a `CONNECT` request in
-Node.js, so there is no support for one.
-
-### HTTP Upgrade request
-
-The meaning of the `Upgrade` header from RFC 7230, section 6.1:
-
-> The "Upgrade" header field is intended to provide a simple mechanism
-> for transitioning from HTTP/1.1 to some other protocol on the same
-> connection.
-
-In Node.js, these request objects come from the `'upgrade'` event on
-the HTTP server.
-
-When this module is used on a HTTP request with an `Upgrade` header, the
-request is considered "finished" immediately, **due to limitations in the
-Node.js interface**. This means if the `Upgrade` request contains a request
-entity, the request will be considered "finished" even before it has been
-read.
-
-There is no such thing as a response object to a `Upgrade` request in
-Node.js, so there is no support for one.
-
-## Example
-
-The following code ensures that file descriptors are always closed
-once the response finishes.
-
-```js
-var destroy = require('destroy')
-var fs = require('fs')
-var http = require('http')
-var onFinished = require('on-finished')
-
-http.createServer(function onRequest (req, res) {
-  var stream = fs.createReadStream('package.json')
-  stream.pipe(res)
-  onFinished(res, function () {
-    destroy(stream)
-  })
-})
-```
-
-## License
-
-[MIT](LICENSE)
-
-[ci-image]: https://badgen.net/github/checks/jshttp/on-finished/master?label=ci
-[ci-url]: https://github.com/jshttp/on-finished/actions/workflows/ci.yml
-[coveralls-image]: https://badgen.net/coveralls/c/github/jshttp/on-finished/master
-[coveralls-url]: https://coveralls.io/r/jshttp/on-finished?branch=master
-[node-image]: https://badgen.net/npm/node/on-finished
-[node-url]: https://nodejs.org/en/download
-[npm-downloads-image]: https://badgen.net/npm/dm/on-finished
-[npm-url]: https://npmjs.org/package/on-finished
-[npm-version-image]: https://badgen.net/npm/v/on-finished
+[sauce]: https://saucelabs.com

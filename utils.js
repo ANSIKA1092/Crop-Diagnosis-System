@@ -1,297 +1,262 @@
 'use strict';
 
-/*!
- * Module dependencies.
- */
+var test = require('tape');
+var inspect = require('object-inspect');
+var SaferBuffer = require('safer-buffer').Buffer;
+var forEach = require('for-each');
+var v = require('es-value-fixtures');
 
-const specialProperties = ['__proto__', 'constructor', 'prototype'];
+var utils = require('../lib/utils');
 
-/**
- * Clones objects
- *
- * @param {Object} obj the object to clone
- * @param {Object} options
- * @return {Object} the cloned object
- * @api private
- */
+test('merge()', function (t) {
+    t.deepEqual(utils.merge(null, true), [null, true], 'merges true into null');
 
-const clone = exports.clone = function clone(obj, options) {
-  if (obj === undefined || obj === null)
-    return obj;
+    t.deepEqual(utils.merge(null, [42]), [null, 42], 'merges null into an array');
 
-  if (Array.isArray(obj))
-    return exports.cloneArray(obj, options);
+    t.deepEqual(utils.merge({ a: 'b' }, { a: 'c' }), { a: ['b', 'c'] }, 'merges two objects with the same key');
 
-  if (obj.constructor) {
-    if (/ObjectI[dD]$/.test(obj.constructor.name)) {
-      return 'function' == typeof obj.clone
-        ? obj.clone()
-        : new obj.constructor(obj.id);
+    var oneMerged = utils.merge({ foo: 'bar' }, { foo: { first: '123' } });
+    t.deepEqual(oneMerged, { foo: ['bar', { first: '123' }] }, 'merges a standalone and an object into an array');
+
+    var twoMerged = utils.merge({ foo: ['bar', { first: '123' }] }, { foo: { second: '456' } });
+    t.deepEqual(twoMerged, { foo: { 0: 'bar', 1: { first: '123' }, second: '456' } }, 'merges a standalone and two objects into an array');
+
+    var sandwiched = utils.merge({ foo: ['bar', { first: '123', second: '456' }] }, { foo: 'baz' });
+    t.deepEqual(sandwiched, { foo: ['bar', { first: '123', second: '456' }, 'baz'] }, 'merges an object sandwiched by two standalones into an array');
+
+    var nestedArrays = utils.merge({ foo: ['baz'] }, { foo: ['bar', 'xyzzy'] });
+    t.deepEqual(nestedArrays, { foo: ['baz', 'bar', 'xyzzy'] });
+
+    var noOptionsNonObjectSource = utils.merge({ foo: 'baz' }, 'bar');
+    t.deepEqual(noOptionsNonObjectSource, { foo: 'baz', bar: true });
+
+    var func = function f() {};
+    t.deepEqual(
+        utils.merge(func, { foo: 'bar' }),
+        [func, { foo: 'bar' }],
+        'functions can not be merged into'
+    );
+
+    func.bar = 'baz';
+    t.deepEqual(
+        utils.merge({ foo: 'bar' }, func),
+        { foo: 'bar', bar: 'baz' },
+        'functions can be merge sources'
+    );
+
+    t.test(
+        'avoids invoking array setters unnecessarily',
+        { skip: typeof Object.defineProperty !== 'function' },
+        function (st) {
+            var setCount = 0;
+            var getCount = 0;
+            var observed = [];
+            Object.defineProperty(observed, 0, {
+                get: function () {
+                    getCount += 1;
+                    return { bar: 'baz' };
+                },
+                set: function () { setCount += 1; }
+            });
+            utils.merge(observed, [null]);
+            st.equal(setCount, 0);
+            st.equal(getCount, 1);
+            observed[0] = observed[0]; // eslint-disable-line no-self-assign
+            st.equal(setCount, 1);
+            st.equal(getCount, 2);
+            st.end();
+        }
+    );
+
+    t.end();
+});
+
+test('assign()', function (t) {
+    var target = { a: 1, b: 2 };
+    var source = { b: 3, c: 4 };
+    var result = utils.assign(target, source);
+
+    t.equal(result, target, 'returns the target');
+    t.deepEqual(target, { a: 1, b: 3, c: 4 }, 'target and source are merged');
+    t.deepEqual(source, { b: 3, c: 4 }, 'source is untouched');
+
+    t.end();
+});
+
+test('combine()', function (t) {
+    t.test('both arrays', function (st) {
+        var a = [1];
+        var b = [2];
+        var combined = utils.combine(a, b);
+
+        st.deepEqual(a, [1], 'a is not mutated');
+        st.deepEqual(b, [2], 'b is not mutated');
+        st.notEqual(a, combined, 'a !== combined');
+        st.notEqual(b, combined, 'b !== combined');
+        st.deepEqual(combined, [1, 2], 'combined is a + b');
+
+        st.end();
+    });
+
+    t.test('one array, one non-array', function (st) {
+        var aN = 1;
+        var a = [aN];
+        var bN = 2;
+        var b = [bN];
+
+        var combinedAnB = utils.combine(aN, b);
+        st.deepEqual(b, [bN], 'b is not mutated');
+        st.notEqual(aN, combinedAnB, 'aN + b !== aN');
+        st.notEqual(a, combinedAnB, 'aN + b !== a');
+        st.notEqual(bN, combinedAnB, 'aN + b !== bN');
+        st.notEqual(b, combinedAnB, 'aN + b !== b');
+        st.deepEqual([1, 2], combinedAnB, 'first argument is array-wrapped when not an array');
+
+        var combinedABn = utils.combine(a, bN);
+        st.deepEqual(a, [aN], 'a is not mutated');
+        st.notEqual(aN, combinedABn, 'a + bN !== aN');
+        st.notEqual(a, combinedABn, 'a + bN !== a');
+        st.notEqual(bN, combinedABn, 'a + bN !== bN');
+        st.notEqual(b, combinedABn, 'a + bN !== b');
+        st.deepEqual([1, 2], combinedABn, 'second argument is array-wrapped when not an array');
+
+        st.end();
+    });
+
+    t.test('neither is an array', function (st) {
+        var combined = utils.combine(1, 2);
+        st.notEqual(1, combined, '1 + 2 !== 1');
+        st.notEqual(2, combined, '1 + 2 !== 2');
+        st.deepEqual([1, 2], combined, 'both arguments are array-wrapped when not an array');
+
+        st.end();
+    });
+
+    t.end();
+});
+
+test('decode', function (t) {
+    t.equal(
+        utils.decode('a+b'),
+        'a b',
+        'decodes + to space'
+    );
+
+    t.equal(
+        utils.decode('name%2Eobj'),
+        'name.obj',
+        'decodes a string'
+    );
+    t.equal(
+        utils.decode('name%2Eobj%2Efoo', null, 'iso-8859-1'),
+        'name.obj.foo',
+        'decodes a string in iso-8859-1'
+    );
+
+    t.end();
+});
+
+test('encode', function (t) {
+    forEach(v.nullPrimitives, function (nullish) {
+        t['throws'](
+            function () { utils.encode(nullish); },
+            TypeError,
+            inspect(nullish) + ' is not a string'
+        );
+    });
+
+    t.equal(utils.encode(''), '', 'empty string returns itself');
+    t.deepEqual(utils.encode([]), [], 'empty array returns itself');
+    t.deepEqual(utils.encode({ length: 0 }), { length: 0 }, 'empty arraylike returns itself');
+
+    t.test('symbols', { skip: !v.hasSymbols }, function (st) {
+        st.equal(utils.encode(Symbol('x')), 'Symbol%28x%29', 'symbol is encoded');
+
+        st.end();
+    });
+
+    t.equal(
+        utils.encode('(abc)'),
+        '%28abc%29',
+        'encodes parentheses'
+    );
+    t.equal(
+        utils.encode({ toString: function () { return '(abc)'; } }),
+        '%28abc%29',
+        'toStrings and encodes parentheses'
+    );
+
+    t.equal(
+        utils.encode('abc 123 💩', null, 'iso-8859-1'),
+        'abc%20123%20%26%2355357%3B%26%2356489%3B',
+        'encodes in iso-8859-1'
+    );
+
+    var longString = '';
+    var expectedString = '';
+    for (var i = 0; i < 1500; i++) {
+        longString += ' ';
+        expectedString += '%20';
     }
 
-    if (obj.constructor.name === 'ReadPreference') {
-      return new obj.constructor(obj.mode, clone(obj.tags, options));
-    }
+    t.equal(
+        utils.encode(longString),
+        expectedString,
+        'encodes a long string'
+    );
 
-    if ('Binary' == obj._bsontype && obj.buffer && obj.value) {
-      return 'function' == typeof obj.clone
-        ? obj.clone()
-        : new obj.constructor(obj.value(true), obj.sub_type);
-    }
+    t.equal(
+        utils.encode('\x28\x29'),
+        '%28%29',
+        'encodes parens normally'
+    );
+    t.equal(
+        utils.encode('\x28\x29', null, null, null, 'RFC1738'),
+        '()',
+        'does not encode parens in RFC1738'
+    );
 
-    if ('Date' === obj.constructor.name || 'Function' === obj.constructor.name)
-      return new obj.constructor(+obj);
+    // todo RFC1738 format
 
-    if ('RegExp' === obj.constructor.name)
-      return new RegExp(obj);
+    t.equal(
+        utils.encode('Āက豈'),
+        '%C4%80%E1%80%80%EF%A4%80',
+        'encodes multibyte chars'
+    );
 
-    if ('Buffer' === obj.constructor.name)
-      return Buffer.from(obj);
-  }
+    t.equal(
+        utils.encode('\uD83D \uDCA9'),
+        '%F0%9F%90%A0%F0%BA%90%80',
+        'encodes lone surrogates'
+    );
 
-  if (isObject(obj))
-    return exports.cloneObject(obj, options);
+    t.end();
+});
 
-  if (obj.valueOf)
-    return obj.valueOf();
-};
+test('isBuffer()', function (t) {
+    forEach([null, undefined, true, false, '', 'abc', 42, 0, NaN, {}, [], function () {}, /a/g], function (x) {
+        t.equal(utils.isBuffer(x), false, inspect(x) + ' is not a buffer');
+    });
 
-/*!
- * ignore
- */
+    var fakeBuffer = { constructor: Buffer };
+    t.equal(utils.isBuffer(fakeBuffer), false, 'fake buffer is not a buffer');
 
-exports.cloneObject = function cloneObject(obj, options) {
-  const minimize = options && options.minimize,
-      ret = {},
-      keys = Object.keys(obj),
-      len = keys.length;
-  let hasKeys = false,
-      val,
-      k = '',
-      i = 0;
+    var saferBuffer = SaferBuffer.from('abc');
+    t.equal(utils.isBuffer(saferBuffer), true, 'SaferBuffer instance is a buffer');
 
-  for (i = 0; i < len; ++i) {
-    k = keys[i];
-    // Not technically prototype pollution because this wouldn't merge properties
-    // onto `Object.prototype`, but avoid properties like __proto__ as a precaution.
-    if (specialProperties.indexOf(k) !== -1) {
-      continue;
-    }
+    var buffer = Buffer.from && Buffer.alloc ? Buffer.from('abc') : new Buffer('abc');
+    t.equal(utils.isBuffer(buffer), true, 'real Buffer instance is a buffer');
+    t.end();
+});
 
-    val = clone(obj[k], options);
+test('isRegExp()', function (t) {
+    t.equal(utils.isRegExp(/a/g), true, 'RegExp is a RegExp');
+    t.equal(utils.isRegExp(new RegExp('a', 'g')), true, 'new RegExp is a RegExp');
+    t.equal(utils.isRegExp(new Date()), false, 'Date is not a RegExp');
 
-    if (!minimize || ('undefined' !== typeof val)) {
-      hasKeys || (hasKeys = true);
-      ret[k] = val;
-    }
-  }
+    forEach(v.primitives, function (primitive) {
+        t.equal(utils.isRegExp(primitive), false, inspect(primitive) + ' is not a RegExp');
+    });
 
-  return minimize
-    ? hasKeys && ret
-    : ret;
-};
-
-exports.cloneArray = function cloneArray(arr, options) {
-  const ret = [],
-      l = arr.length;
-  let i = 0;
-  for (; i < l; i++)
-    ret.push(clone(arr[i], options));
-  return ret;
-};
-
-/**
- * Merges `from` into `to` without overwriting existing properties.
- *
- * @param {Object} to
- * @param {Object} from
- * @api private
- */
-
-exports.merge = function merge(to, from) {
-  const keys = Object.keys(from);
-
-  for (const key of keys) {
-    if (specialProperties.indexOf(key) !== -1) {
-      continue;
-    }
-    if ('undefined' === typeof to[key]) {
-      to[key] = from[key];
-    } else {
-      if (exports.isObject(from[key])) {
-        merge(to[key], from[key]);
-      } else {
-        to[key] = from[key];
-      }
-    }
-  }
-};
-
-/**
- * Same as merge but clones the assigned values.
- *
- * @param {Object} to
- * @param {Object} from
- * @api private
- */
-
-exports.mergeClone = function mergeClone(to, from) {
-  const keys = Object.keys(from);
-
-  for (const key of keys) {
-    if (specialProperties.indexOf(key) !== -1) {
-      continue;
-    }
-    if ('undefined' === typeof to[key]) {
-      to[key] = clone(from[key]);
-    } else {
-      if (exports.isObject(from[key])) {
-        mergeClone(to[key], from[key]);
-      } else {
-        to[key] = clone(from[key]);
-      }
-    }
-  }
-};
-
-/**
- * Read pref helper (mongo 2.2 drivers support this)
- *
- * Allows using aliases instead of full preference names:
- *
- *     p   primary
- *     pp  primaryPreferred
- *     s   secondary
- *     sp  secondaryPreferred
- *     n   nearest
- *
- * @param {String} pref
- */
-
-exports.readPref = function readPref(pref) {
-  switch (pref) {
-    case 'p':
-      pref = 'primary';
-      break;
-    case 'pp':
-      pref = 'primaryPreferred';
-      break;
-    case 's':
-      pref = 'secondary';
-      break;
-    case 'sp':
-      pref = 'secondaryPreferred';
-      break;
-    case 'n':
-      pref = 'nearest';
-      break;
-  }
-
-  return pref;
-};
-
-
-/**
- * Read Concern helper (mongo 3.2 drivers support this)
- *
- * Allows using string to specify read concern level:
- *
- *     local          3.2+
- *     available      3.6+
- *     majority       3.2+
- *     linearizable   3.4+
- *     snapshot       4.0+
- *
- * @param {String|Object} concern
- */
-
-exports.readConcern = function readConcern(concern) {
-  if ('string' === typeof concern) {
-    switch (concern) {
-      case 'l':
-        concern = 'local';
-        break;
-      case 'a':
-        concern = 'available';
-        break;
-      case 'm':
-        concern = 'majority';
-        break;
-      case 'lz':
-        concern = 'linearizable';
-        break;
-      case 's':
-        concern = 'snapshot';
-        break;
-    }
-    concern = { level: concern };
-  }
-  return concern;
-};
-
-/**
- * Object.prototype.toString.call helper
- */
-
-const _toString = Object.prototype.toString;
-exports.toString = function(arg) {
-  return _toString.call(arg);
-};
-
-/**
- * Determines if `arg` is an object.
- *
- * @param {Object|Array|String|Function|RegExp|any} arg
- * @return {Boolean}
- */
-
-const isObject = exports.isObject = function(arg) {
-  return '[object Object]' == exports.toString(arg);
-};
-
-/**
- * Object.keys helper
- */
-
-exports.keys = Object.keys;
-
-/**
- * Basic Object.create polyfill.
- * Only one argument is supported.
- *
- * Based on https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Global_Objects/Object/create
- */
-
-exports.create = 'function' == typeof Object.create
-  ? Object.create
-  : create;
-
-function create(proto) {
-  if (arguments.length > 1) {
-    throw new Error('Adding properties is not supported');
-  }
-
-  function F() { }
-  F.prototype = proto;
-  return new F;
-}
-
-/**
- * inheritance
- */
-
-exports.inherits = function(ctor, superCtor) {
-  ctor.prototype = exports.create(superCtor.prototype);
-  ctor.prototype.constructor = ctor;
-};
-
-/**
- * Check if this object is an arguments object
- *
- * @param {Any} v
- * @return {Boolean}
- */
-
-exports.isArgumentsObject = function(v) {
-  return Object.prototype.toString.call(v) === '[object Arguments]';
-};
+    t.end();
+});
