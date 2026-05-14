@@ -1,144 +1,39 @@
 {
-  "name": "mpath",
-  "version": "0.9.0",
-  "description": "{G,S}et object values using MongoDB-like path notation",
-  "main": "index.js",
-  "scripts": {
-    "lint": "eslint .",
-    "test": "mocha test/*"
+  "name": "on-finished",
+  "description": "Execute a callback when a request closes, finishes, or errors",
+  "version": "2.4.1",
+  "contributors": [
+    "Douglas Christopher Wilson <doug@somethingdoug.com>",
+    "Jonathan Ong <me@jongleberry.com> (http://jongleberry.com)"
+  ],
+  "license": "MIT",
+  "repository": "jshttp/on-finished",
+  "dependencies": {
+    "ee-first": "1.1.1"
+  },
+  "devDependencies": {
+    "eslint": "7.32.0",
+    "eslint-config-standard": "14.1.1",
+    "eslint-plugin-import": "2.25.4",
+    "eslint-plugin-markdown": "2.2.1",
+    "eslint-plugin-node": "11.1.0",
+    "eslint-plugin-promise": "5.2.0",
+    "eslint-plugin-standard": "4.1.0",
+    "mocha": "9.2.1",
+    "nyc": "15.1.0"
   },
   "engines": {
-    "node": ">=4.0.0"
+    "node": ">= 0.8"
   },
-  "repository": "git://github.com/aheckmann/mpath.git",
-  "keywords": [
-    "mongodb",
-    "path",
-    "get",
-    "set"
+  "files": [
+    "HISTORY.md",
+    "LICENSE",
+    "index.js"
   ],
-  "author": "Aaron Heckmann <aaron.heckmann+github@gmail.com>",
-  "license": "MIT",
-  "devDependencies": {
-    "mocha": "5.x",
-    "benchmark": "~1.0.0",
-    "eslint": "7.16.0"
-  },
-  "eslintConfig": {
-    "extends": [
-      "eslint:recommended"
-    ],
-    "parserOptions": {
-      "ecmaVersion": 2015
-    },
-    "env": {
-      "node": true,
-      "es6": true
-    },
-    "rules": {
-      "comma-style": "error",
-      "indent": [
-        "error",
-        2,
-        {
-          "SwitchCase": 1,
-          "VariableDeclarator": 2
-        }
-      ],
-      "keyword-spacing": "error",
-      "no-whitespace-before-property": "error",
-      "no-buffer-constructor": "warn",
-      "no-console": "off",
-      "no-multi-spaces": "error",
-      "no-constant-condition": "off",
-      "func-call-spacing": "error",
-      "no-trailing-spaces": "error",
-      "no-undef": "error",
-      "no-unneeded-ternary": "error",
-      "no-const-assign": "error",
-      "no-useless-rename": "error",
-      "no-dupe-keys": "error",
-      "space-in-parens": [
-        "error",
-        "never"
-      ],
-      "spaced-comment": [
-        "error",
-        "always",
-        {
-          "block": {
-            "markers": [
-              "!"
-            ],
-            "balanced": true
-          }
-        }
-      ],
-      "key-spacing": [
-        "error",
-        {
-          "beforeColon": false,
-          "afterColon": true
-        }
-      ],
-      "comma-spacing": [
-        "error",
-        {
-          "before": false,
-          "after": true
-        }
-      ],
-      "array-bracket-spacing": 1,
-      "arrow-spacing": [
-        "error",
-        {
-          "before": true,
-          "after": true
-        }
-      ],
-      "object-curly-spacing": [
-        "error",
-        "always"
-      ],
-      "comma-dangle": [
-        "error",
-        "never"
-      ],
-      "no-unreachable": "error",
-      "quotes": [
-        "error",
-        "single"
-      ],
-      "quote-props": [
-        "error",
-        "as-needed"
-      ],
-      "semi": "error",
-      "no-extra-semi": "error",
-      "semi-spacing": "error",
-      "no-spaced-func": "error",
-      "no-throw-literal": "error",
-      "space-before-blocks": "error",
-      "space-before-function-paren": [
-        "error",
-        "never"
-      ],
-      "space-infix-ops": "error",
-      "space-unary-ops": "error",
-      "no-var": "warn",
-      "prefer-const": "warn",
-      "strict": [
-        "error",
-        "global"
-      ],
-      "no-restricted-globals": [
-        "error",
-        {
-          "name": "context",
-          "message": "Don't use Mocha's global context"
-        }
-      ],
-      "no-prototype-builtins": "off"
-    }
+  "scripts": {
+    "lint": "eslint .",
+    "test": "mocha --reporter spec --bail --check-leaks test/",
+    "test-ci": "nyc --reporter=lcovonly --reporter=text npm test",
+    "test-cov": "nyc --reporter=html --reporter=text npm test"
   }
 }

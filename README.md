@@ -1,278 +1,162 @@
-#mpath
+# on-finished
 
-{G,S}et javascript object values using MongoDB-like path notation.
+[![NPM Version][npm-version-image]][npm-url]
+[![NPM Downloads][npm-downloads-image]][npm-url]
+[![Node.js Version][node-image]][node-url]
+[![Build Status][ci-image]][ci-url]
+[![Coverage Status][coveralls-image]][coveralls-url]
 
-###Getting
+Execute a callback when a HTTP request closes, finishes, or errors.
 
-```js
-var mpath = require('mpath');
+## Install
 
-var obj = {
-    comments: [
-      { title: 'funny' },
-      { title: 'exciting!' }
-    ]
-}
+This is a [Node.js](https://nodejs.org/en/) module available through the
+[npm registry](https://www.npmjs.com/). Installation is done using the
+[`npm install` command](https://docs.npmjs.com/getting-started/installing-npm-packages-locally):
 
-mpath.get('comments.1.title', obj) // 'exciting!'
+```sh
+$ npm install on-finished
 ```
 
-`mpath.get` supports array property notation as well.
+## API
 
 ```js
-var obj = {
-    comments: [
-      { title: 'funny' },
-      { title: 'exciting!' }
-    ]
-}
-
-mpath.get('comments.title', obj) // ['funny', 'exciting!']
+var onFinished = require('on-finished')
 ```
 
-Array property and indexing syntax, when used together, are very powerful.
+### onFinished(res, listener)
+
+Attach a listener to listen for the response to finish. The listener will
+be invoked only once when the response finished. If the response finished
+to an error, the first argument will contain the error. If the response
+has already finished, the listener will be invoked.
+
+Listening to the end of a response would be used to close things associated
+with the response, like open files.
+
+Listener is invoked as `listener(err, res)`.
+
+<!-- eslint-disable handle-callback-err -->
 
 ```js
-var obj = {
-  array: [
-      { o: { array: [{x: {b: [4,6,8]}}, { y: 10} ] }}
-    , { o: { array: [{x: {b: [1,2,3]}}, { x: {z: 10 }}, { x: 'Turkey Day' }] }}
-    , { o: { array: [{x: {b: null }}, { x: { b: [null, 1]}}] }}
-    , { o: { array: [{x: null }] }}
-    , { o: { array: [{y: 3 }] }}
-    , { o: { array: [3, 0, null] }}
-    , { o: { name: 'ha' }}
-  ];
-}
-
-var found = mpath.get('array.o.array.x.b.1', obj);
-
-console.log(found); // prints..
-
-    [ [6, undefined]
-    , [2, undefined, undefined]
-    , [null, 1]
-    , [null]
-    , [undefined]
-    , [undefined, undefined, undefined]
-    , undefined
-    ]
-
+onFinished(res, function (err, res) {
+  // clean up open fds, etc.
+  // err contains the error if request error'd
+})
 ```
 
-#####Field selection rules:
+### onFinished(req, listener)
 
-The following rules are iteratively applied to each `segment` in the passed `path`. For example:
+Attach a listener to listen for the request to finish. The listener will
+be invoked only once when the request finished. If the request finished
+to an error, the first argument will contain the error. If the request
+has already finished, the listener will be invoked.
+
+Listening to the end of a request would be used to know when to continue
+after reading the data.
+
+Listener is invoked as `listener(err, req)`.
+
+<!-- eslint-disable handle-callback-err -->
 
 ```js
-var path = 'one.two.14'; // path
-'one' // segment 0
-'two' // segment 1
-14    // segment 2
+var data = ''
+
+req.setEncoding('utf8')
+req.on('data', function (str) {
+  data += str
+})
+
+onFinished(req, function (err, req) {
+  // data is read unless there is err
+})
 ```
 
-- 1) when value of the segment parent is not an array, return the value of `parent.segment`
-- 2) when value of the segment parent is an array
-  - a) if the segment is an integer, replace the parent array with the value at `parent[segment]`
-  - b) if not an integer, keep the array but replace each array `item` with the value returned from calling `get(remainingSegments, item)` or undefined if falsey.
+### onFinished.isFinished(res)
 
-#####Maps
+Determine if `res` is already finished. This would be useful to check and
+not even start certain operations if the response has already finished.
 
-`mpath.get` also accepts an optional `map` argument which receives each individual found value. The value returned from the `map` function will be used in the original found values place.
+### onFinished.isFinished(req)
+
+Determine if `req` is already finished. This would be useful to check and
+not even start certain operations if the request has already finished.
+
+## Special Node.js requests
+
+### HTTP CONNECT method
+
+The meaning of the `CONNECT` method from RFC 7231, section 4.3.6:
+
+> The CONNECT method requests that the recipient establish a tunnel to
+> the destination origin server identified by the request-target and,
+> if successful, thereafter restrict its behavior to blind forwarding
+> of packets, in both directions, until the tunnel is closed.  Tunnels
+> are commonly used to create an end-to-end virtual connection, through
+> one or more proxies, which can then be secured using TLS (Transport
+> Layer Security, [RFC5246]).
+
+In Node.js, these request objects come from the `'connect'` event on
+the HTTP server.
+
+When this module is used on a HTTP `CONNECT` request, the request is
+considered "finished" immediately, **due to limitations in the Node.js
+interface**. This means if the `CONNECT` request contains a request entity,
+the request will be considered "finished" even before it has been read.
+
+There is no such thing as a response object to a `CONNECT` request in
+Node.js, so there is no support for one.
+
+### HTTP Upgrade request
+
+The meaning of the `Upgrade` header from RFC 7230, section 6.1:
+
+> The "Upgrade" header field is intended to provide a simple mechanism
+> for transitioning from HTTP/1.1 to some other protocol on the same
+> connection.
+
+In Node.js, these request objects come from the `'upgrade'` event on
+the HTTP server.
+
+When this module is used on a HTTP request with an `Upgrade` header, the
+request is considered "finished" immediately, **due to limitations in the
+Node.js interface**. This means if the `Upgrade` request contains a request
+entity, the request will be considered "finished" even before it has been
+read.
+
+There is no such thing as a response object to a `Upgrade` request in
+Node.js, so there is no support for one.
+
+## Example
+
+The following code ensures that file descriptors are always closed
+once the response finishes.
 
 ```js
-var obj = {
-    comments: [
-      { title: 'funny' },
-      { title: 'exciting!' }
-    ]
-}
+var destroy = require('destroy')
+var fs = require('fs')
+var http = require('http')
+var onFinished = require('on-finished')
 
-mpath.get('comments.title', obj, function (val) {
-  return 'funny' == val
-    ? 'amusing'
-    : val;
-});
-// ['amusing', 'exciting!']
+http.createServer(function onRequest (req, res) {
+  var stream = fs.createReadStream('package.json')
+  stream.pipe(res)
+  onFinished(res, function () {
+    destroy(stream)
+  })
+})
 ```
 
-###Setting
+## License
 
-```js
-var obj = {
-    comments: [
-      { title: 'funny' },
-      { title: 'exciting!' }
-    ]
-}
+[MIT](LICENSE)
 
-mpath.set('comments.1.title', 'hilarious', obj)
-console.log(obj.comments[1].title) // 'hilarious'
-```
-
-`mpath.set` supports the same array property notation as `mpath.get`.
-
-```js
-var obj = {
-    comments: [
-      { title: 'funny' },
-      { title: 'exciting!' }
-    ]
-}
-
-mpath.set('comments.title', ['hilarious', 'fruity'], obj);
-
-console.log(obj); // prints..
-
-  { comments: [
-      { title: 'hilarious' },
-      { title: 'fruity' }
-  ]}
-```
-
-Array property and indexing syntax can be used together also when setting.
-
-```js
-var obj = {
-  array: [
-      { o: { array: [{x: {b: [4,6,8]}}, { y: 10} ] }}
-    , { o: { array: [{x: {b: [1,2,3]}}, { x: {z: 10 }}, { x: 'Turkey Day' }] }}
-    , { o: { array: [{x: {b: null }}, { x: { b: [null, 1]}}] }}
-    , { o: { array: [{x: null }] }}
-    , { o: { array: [{y: 3 }] }}
-    , { o: { array: [3, 0, null] }}
-    , { o: { name: 'ha' }}
-  ]
-}
-
-mpath.set('array.1.o', 'this was changed', obj);
-
-console.log(require('util').inspect(obj, false, 1000)); // prints..
-
-{
-  array: [
-      { o: { array: [{x: {b: [4,6,8]}}, { y: 10} ] }}
-    , { o: 'this was changed' }
-    , { o: { array: [{x: {b: null }}, { x: { b: [null, 1]}}] }}
-    , { o: { array: [{x: null }] }}
-    , { o: { array: [{y: 3 }] }}
-    , { o: { array: [3, 0, null] }}
-    , { o: { name: 'ha' }}
-  ];
-}
-
-mpath.set('array.o.array.x', 'this was changed too', obj);
-
-console.log(require('util').inspect(obj, false, 1000)); // prints..
-
-{
-  array: [
-      { o: { array: [{x: 'this was changed too'}, { y: 10, x: 'this was changed too'} ] }}
-    , { o: 'this was changed' }
-    , { o: { array: [{x: 'this was changed too'}, { x: 'this was changed too'}] }}
-    , { o: { array: [{x: 'this was changed too'}] }}
-    , { o: { array: [{x: 'this was changed too', y: 3 }] }}
-    , { o: { array: [3, 0, null] }}
-    , { o: { name: 'ha' }}
-  ];
-}
-```
-
-####Setting arrays
-
-By default, setting a property within an array to another array results in each element of the new array being set to the item in the destination array at the matching index. An example is helpful.
-
-```js
-var obj = {
-    comments: [
-      { title: 'funny' },
-      { title: 'exciting!' }
-    ]
-}
-
-mpath.set('comments.title', ['hilarious', 'fruity'], obj);
-
-console.log(obj); // prints..
-
-  { comments: [
-      { title: 'hilarious' },
-      { title: 'fruity' }
-  ]}
-```
-
-If we do not desire this destructuring-like assignment behavior we may instead specify the `$` operator in the path being set to force the array to be copied directly.
-
-```js
-var obj = {
-    comments: [
-      { title: 'funny' },
-      { title: 'exciting!' }
-    ]
-}
-
-mpath.set('comments.$.title', ['hilarious', 'fruity'], obj);
-
-console.log(obj); // prints..
-
-  { comments: [
-      { title: ['hilarious', 'fruity'] },
-      { title: ['hilarious', 'fruity'] }
-  ]}
-```
-
-####Field assignment rules
-
-The rules utilized mirror those used on `mpath.get`, meaning we can take values returned from `mpath.get`, update them, and reassign them using `mpath.set`. Note that setting nested arrays of arrays can get unweildy quickly. Check out the [tests](https://github.com/aheckmann/mpath/blob/master/test/index.js) for more extreme examples.
-
-#####Maps
-
-`mpath.set` also accepts an optional `map` argument which receives each individual value being set. The value returned from the `map` function will be used in the original values place.
-
-```js
-var obj = {
-    comments: [
-      { title: 'funny' },
-      { title: 'exciting!' }
-    ]
-}
-
-mpath.set('comments.title', ['hilarious', 'fruity'], obj, function (val) {
-  return val.length;
-});
-
-console.log(obj); // prints..
-
-  { comments: [
-      { title: 9 },
-      { title: 6 }
-  ]}
-```
-
-### Custom object types
-
-Sometimes you may want to enact the same functionality on custom object types that store all their real data internally, say for an ODM type object. No fear, `mpath` has you covered. Simply pass the name of the property being used to store the internal data and it will be traversed instead:
-
-```js
-var mpath = require('mpath');
-
-var obj = {
-    comments: [
-      { title: 'exciting!', _doc: { title: 'great!' }}
-    ]
-}
-
-mpath.get('comments.0.title', obj, '_doc')            // 'great!'
-mpath.set('comments.0.title', 'nov 3rd', obj, '_doc')
-mpath.get('comments.0.title', obj, '_doc')            // 'nov 3rd'
-mpath.get('comments.0.title', obj)                    // 'exciting'
-```
-
-When used with a `map`, the `map` argument comes last.
-
-```js
-mpath.get(path, obj, '_doc', map);
-mpath.set(path, val, obj, '_doc', map);
-```
-
-[LICENSE](https://github.com/aheckmann/mpath/blob/master/LICENSE)
-
+[ci-image]: https://badgen.net/github/checks/jshttp/on-finished/master?label=ci
+[ci-url]: https://github.com/jshttp/on-finished/actions/workflows/ci.yml
+[coveralls-image]: https://badgen.net/coveralls/c/github/jshttp/on-finished/master
+[coveralls-url]: https://coveralls.io/r/jshttp/on-finished?branch=master
+[node-image]: https://badgen.net/npm/node/on-finished
+[node-url]: https://nodejs.org/en/download
+[npm-downloads-image]: https://badgen.net/npm/dm/on-finished
+[npm-url]: https://npmjs.org/package/on-finished
+[npm-version-image]: https://badgen.net/npm/v/on-finished
